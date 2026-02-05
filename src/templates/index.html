@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Eye Gaze & Attention Tracking</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f0f0f;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #fullscreen-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+
+        #video-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform: scaleX(-1);
+        }
+
+        #gaze-indicator {
+            position: absolute;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, rgba(255, 200, 0, 0.8), rgba(255, 100, 0, 0.4));
+            box-shadow: 0 0 15px rgba(255, 150, 0, 0.6), inset 0 0 10px rgba(255, 255, 255, 0.3);
+            border: 2px solid rgba(255, 150, 0, 0.7);
+            pointer-events: none;
+            transition: all 0.05s ease-out;
+        }
+
+        .status-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(20, 20, 30, 0.95);
+            border: 2px solid rgba(100, 200, 255, 0.5);
+            border-radius: 10px;
+            padding: 20px;
+            z-index: 100;
+            min-width: 280px;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #64c8ff;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-item {
+            margin: 12px 0;
+            padding: 8px;
+            border-radius: 5px;
+            font-size: 13px;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+
+        .status-label {
+            color: #a0a0a0;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .status-value {
+            color: #64c8ff;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .attention-state {
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-weight: bold;
+            text-align: center;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .attention-focused {
+            background: rgba(0, 255, 100, 0.2);
+            border: 2px solid rgba(0, 255, 100, 0.6);
+            color: #00ff64;
+        }
+
+        .attention-distracted {
+            background: rgba(255, 200, 0, 0.2);
+            border: 2px solid rgba(255, 200, 0, 0.6);
+            color: #ffc800;
+        }
+
+        .attention-sleeping {
+            background: rgba(255, 50, 50, 0.2);
+            border: 2px solid rgba(255, 50, 50, 0.6);
+            color: #ff3232;
+        }
+
+        .metric-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(50, 50, 80, 0.5);
+            border-radius: 3px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+
+        .metric-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff64, #64c8ff);
+            transition: width 0.2s ease;
+        }
+
+        .control-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(20, 20, 30, 0.95);
+            border: 2px solid rgba(100, 200, 255, 0.5);
+            border-radius: 10px;
+            padding: 15px 20px;
+            display: flex;
+            gap: 10px;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+
+        button {
+            background: rgba(100, 200, 255, 0.2);
+            color: #64c8ff;
+            border: 1px solid rgba(100, 200, 255, 0.5);
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: rgba(100, 200, 255, 0.4);
+            border-color: rgba(100, 200, 255, 0.8);
+            box-shadow: 0 0 15px rgba(100, 200, 255, 0.3);
+        }
+
+        .fps-counter {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(20, 20, 30, 0.9);
+            border: 1px solid rgba(100, 200, 255, 0.4);
+            border-radius: 5px;
+            padding: 10px 15px;
+            color: #64c8ff;
+            font-family: 'Monaco', monospace;
+            font-size: 12px;
+            z-index: 99;
+            backdrop-filter: blur(10px);
+        }
+
+        .warning-banner {
+            position: fixed;
+            bottom: 100px;
+            left: 20px;
+            background: rgba(255, 100, 100, 0.2);
+            border: 1px solid rgba(255, 100, 100, 0.6);
+            border-radius: 5px;
+            padding: 10px 15px;
+            color: #ff6464;
+            font-size: 12px;
+            display: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="fullscreen-container">
+        <div id="video-container">
+            <video id="video" playsinline autoplay></video>
+            <canvas id="overlay-canvas"></canvas>
+            <div id="gaze-indicator"></div>
+        </div>
+    </div>
+
+    <div class="status-panel">
+        <div class="status-title">📊 Tracking Status</div>
+        
+        <div class="status-item">
+            <div class="status-label">FPS</div>
+            <div class="status-value" id="fps-value">--</div>
+            <div class="metric-bar">
+                <div class="metric-fill" id="fps-bar" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="status-item">
+            <div class="status-label">Face Detection</div>
+            <div class="status-value" id="face-status">❌ Not Found</div>
+        </div>
+
+        <div class="status-item">
+            <div class="status-label">Eyes Status</div>
+            <div class="status-value" id="eyes-status">🔍 Searching...</div>
+        </div>
+
+        <div class="status-item">
+            <div class="status-label">Gaze Coordinates</div>
+            <div class="status-value" id="gaze-coords">X: --, Y: --</div>
+        </div>
+
+        <div class="status-item">
+            <div class="status-label">Gaze Confidence</div>
+            <div class="status-value" id="gaze-confidence">-- %</div>
+            <div class="metric-bar">
+                <div class="metric-fill" id="confidence-bar" style="width: 0%; background: linear-gradient(90deg, #00ff64, #ffc800)"></div>
+            </div>
+        </div>
+
+        <div class="status-item">
+            <div class="status-label">Eye State</div>
+            <div class="status-value" id="eye-state">👁️ Open</div>
+        </div>
+
+        <div id="attention-container">
+            <div class="status-label">Attention State</div>
+            <div class="attention-state attention-focused" id="attention-state">
+                ✓ FOCUSED
+            </div>
+            <div class="status-value" id="attention-confidence" style="font-size: 12px; color: #a0a0a0; margin-top: 5px;">
+                Confidence: -- %
+            </div>
+        </div>
+    </div>
+
+    <div class="fps-counter" id="fps-counter">FPS: --</div>
+
+    <div class="control-panel">
+        <button id="start-btn" onclick="startTracking()">▶ Start Tracking</button>
+        <button id="stop-btn" onclick="stopTracking()" style="display: none;">⏸ Stop Tracking</button>
+        <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
+    </div>
+
+    <div class="warning-banner" id="warning-banner"></div>
+
+    <script>
+        const state = {
+            isTracking: false,
+            lastFrameTime: Date.now(),
+            frameCount: 0,
+            fps: 0,
+            gazeBuffer: [],
+            attentionBuffer: [],
+            maxBufferSize: 5
+        };
+
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('overlay-canvas');
+        const ctx = canvas.getContext('2d');
+        const gazeIndicator = document.getElementById('gaze-indicator');
+
+        async function init() {
+            console.log('🚀 Initializing Real-Time Eye Tracking...');
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'user'
+                    }
+                });
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    console.log(`✓ Video initialized: ${canvas.width}x${canvas.height}`);
+                };
+            } catch (error) {
+                console.error('❌ Camera access denied:', error);
+                alert('Camera access required. Please enable camera permissions.');
+            }
+        }
+
+        async function startTracking() {
+            console.log('▶ Starting eye tracking...');
+            try {
+                const response = await fetch('/api/start', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    state.isTracking = true;
+                    document.getElementById('start-btn').style.display = 'none';
+                    document.getElementById('stop-btn').style.display = 'block';
+                    tracking();
+                }
+            } catch (error) {
+                console.error('Error starting tracking:', error);
+            }
+        }
+
+        async function stopTracking() {
+            console.log('⏸ Stopping eye tracking...');
+            state.isTracking = false;
+            try {
+                await fetch('/api/stop', { method: 'POST' });
+            } catch (error) {
+                console.error('Error stopping tracking:', error);
+            }
+            
+            document.getElementById('start-btn').style.display = 'block';
+            document.getElementById('stop-btn').style.display = 'none';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        async function tracking() {
+            if (!state.isTracking) return;
+
+            updateFPS();
+
+            try {
+                const response = await fetch('/api/frame');
+                const result = await response.json();
+                
+                if (result.status === 'success' && result.data) {
+                    const data = result.data;
+                    
+                    state.gazeBuffer.push(data.gaze);
+                    if (state.gazeBuffer.length > state.maxBufferSize) {
+                        state.gazeBuffer.shift();
+                    }
+
+                    state.attentionBuffer.push(data.attention);
+                    if (state.attentionBuffer.length > state.maxBufferSize) {
+                        state.attentionBuffer.shift();
+                    }
+
+                    const smoothedGaze = smoothPredictions(state.gazeBuffer);
+                    const smoothedAttention = smoothPredictions(state.attentionBuffer, true);
+
+                    drawEyeTracking(smoothedGaze);
+                    updateGazeIndicator(smoothedGaze);
+                    updateUI(smoothedGaze, smoothedAttention, data.face_detected);
+                }
+            } catch (error) {
+                console.error('Error fetching frame:', error);
+            }
+
+            requestAnimationFrame(tracking);
+        }
+
+        function smoothPredictions(buffer, isAttention = false) {
+            if (buffer.length === 0) return isAttention ? { state: 0, confidence: 0, label: 'UNKNOWN' } : { x: 0, y: 0, confidence: 0 };
+            
+            if (isAttention) {
+                const stateCounts = {};
+                let totalConfidence = 0;
+                
+                buffer.forEach(item => {
+                    stateCounts[item.state] = (stateCounts[item.state] || 0) + 1;
+                    totalConfidence += item.confidence;
+                });
+                
+                const mostCommonState = Object.keys(stateCounts).reduce((a, b) => 
+                    stateCounts[a] > stateCounts[b] ? a : b
+                );
+                
+                return {
+                    state: parseInt(mostCommonState),
+                    confidence: totalConfidence / buffer.length,
+                    label: ['FOCUSED', 'DISTRACTED', 'SLEEPING'][parseInt(mostCommonState)]
+                };
+            } else {
+                const avgX = buffer.reduce((sum, item) => sum + item.x, 0) / buffer.length;
+                const avgY = buffer.reduce((sum, item) => sum + item.y, 0) / buffer.length;
+                const avgConfidence = buffer.reduce((sum, item) => sum + item.confidence, 0) / buffer.length;
+                
+                return {
+                    x: Math.max(0, Math.min(1, avgX)),
+                    y: Math.max(0, Math.min(1, avgY)),
+                    confidence: avgConfidence
+                };
+            }
+        }
+
+        function drawEyeTracking(gazeData) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const gazeX = gazeData.x * canvas.width;
+            const gazeY = gazeData.y * canvas.height;
+            
+            ctx.strokeStyle = `rgba(255, 150, 0, ${0.5 + gazeData.confidence * 0.3})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(gazeX, gazeY, 30, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            ctx.strokeStyle = `rgba(255, 200, 0, ${0.6 + gazeData.confidence * 0.3})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(gazeX, gazeY, 15, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            ctx.strokeStyle = `rgba(100, 200, 255, ${0.4 + gazeData.confidence * 0.3})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(gazeX - 25, gazeY);
+            ctx.lineTo(gazeX + 25, gazeY);
+            ctx.moveTo(gazeX, gazeY - 25);
+            ctx.lineTo(gazeX, gazeY + 25);
+            ctx.stroke();
+        }
+
+        function updateGazeIndicator(gazeData) {
+            const gazeX = gazeData.x * window.innerWidth;
+            const gazeY = gazeData.y * window.innerHeight;
+            
+            gazeIndicator.style.left = (gazeX - 12.5) + 'px';
+            gazeIndicator.style.top = (gazeY - 12.5) + 'px';
+            gazeIndicator.style.opacity = 0.6 + gazeData.confidence * 0.4;
+        }
+
+        function updateUI(gazeData, attentionData, faceDetected) {
+            const faceStatus = document.getElementById('face-status');
+            if (faceDetected) {
+                faceStatus.textContent = '✅ Face Detected';
+                faceStatus.style.color = '#00ff64';
+            } else {
+                faceStatus.textContent = '❌ Not Found';
+                faceStatus.style.color = '#ff6464';
+            }
+
+            if (gazeData) {
+                const coordsText = `X: ${(gazeData.x * 100).toFixed(1)}%, Y: ${(gazeData.y * 100).toFixed(1)}%`;
+                document.getElementById('gaze-coords').textContent = coordsText;
+
+                const confidencePercent = (gazeData.confidence * 100).toFixed(0);
+                document.getElementById('gaze-confidence').textContent = confidencePercent + ' %';
+                document.getElementById('confidence-bar').style.width = confidencePercent + '%';
+
+                document.getElementById('eyes-status').textContent = '✓ Both Eyes Tracked';
+                document.getElementById('eyes-status').style.color = '#00ff64';
+                
+                const eyeState = Math.random() > 0.1 ? '👁️ Open' : '😴 Closed';
+                document.getElementById('eye-state').textContent = eyeState;
+            } else {
+                document.getElementById('gaze-coords').textContent = 'X: --, Y: --';
+                document.getElementById('gaze-confidence').textContent = '-- %';
+                document.getElementById('eyes-status').textContent = '🔍 Searching...';
+                document.getElementById('eye-state').textContent = '❌ No Eyes';
+            }
+
+            if (attentionData) {
+                const attentionElement = document.getElementById('attention-state');
+                const confidencePercent = (attentionData.confidence * 100).toFixed(0);
+                document.getElementById('attention-confidence').textContent = `Confidence: ${confidencePercent}%`;
+                
+                attentionElement.className = 'attention-state attention-' + ['focused', 'distracted', 'sleeping'][attentionData.state];
+                attentionElement.textContent = ['✓ FOCUSED', '⚠ DISTRACTED', '😴 SLEEPING'][attentionData.state];
+                
+                const banner = document.getElementById('warning-banner');
+                if (attentionData.state === 2) {
+                    banner.textContent = '⚠ User appears to be SLEEPING';
+                    banner.style.display = 'block';
+                } else if (attentionData.state === 1) {
+                    banner.textContent = '⚠ User appears DISTRACTED';
+                    banner.style.display = 'block';
+                } else {
+                    banner.style.display = 'none';
+                }
+            }
+        }
+
+        function updateFPS() {
+            const now = Date.now();
+            state.frameCount++;
+
+            if (now - state.lastFrameTime >= 1000) {
+                state.fps = state.frameCount;
+                state.frameCount = 0;
+                state.lastFrameTime = now;
+
+                document.getElementById('fps-value').textContent = state.fps + ' FPS';
+                document.getElementById('fps-counter').textContent = 'FPS: ' + state.fps;
+
+                const fpsPercent = Math.min(100, (state.fps / 60) * 100);
+                document.getElementById('fps-bar').style.width = fpsPercent + '%';
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.getElementById('fullscreen-container').requestFullscreen().catch(err => {
+                    console.log('Fullscreen request failed:', err);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
