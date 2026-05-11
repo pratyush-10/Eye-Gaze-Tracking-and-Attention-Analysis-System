@@ -112,3 +112,47 @@ if __name__ == "__main__":
     model_attn = build_attention_classifier()
     model_gaze = build_gaze_estimator()
     print("✓ Models built successfully")
+
+# Add this to the BOTTOM of your existing src/models.py
+
+# Replace this specific function in src/models.py
+def build_emotion_classifier(input_dim):
+    """Build Emotion Classification model for VREED CSV tabular features"""
+    from tensorflow import keras
+    from tensorflow.keras import layers
+    from config import EMOTION_NUM_CLASSES, LEARNING_RATE
+    
+    model = keras.Sequential([
+        layers.Input(shape=(input_dim,)),
+        layers.Dense(128, activation='relu', name='emo_dense1'),
+        layers.Dropout(0.3),
+        layers.Dense(64, activation='relu', name='emo_dense2'),
+        layers.Dense(32, activation='relu', name='emo_dense3'),
+        # Updated to output 4 classes based on EMOTION_NUM_CLASSES
+        layers.Dense(EMOTION_NUM_CLASSES, activation='softmax', name='emo_output') 
+    ])
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    return model
+
+def build_cognitive_load_classifier(input_dim):
+    """Build Cognitive Load Classification model for Multimodal CSV features"""
+    model = keras.Sequential([
+        layers.Input(shape=(input_dim,)),
+        layers.Dense(256, activation='relu', name='cog_dense1'),
+        layers.BatchNormalization(),
+        layers.Dropout(0.4),
+        layers.Dense(128, activation='relu', name='cog_dense2'),
+        layers.Dropout(0.3),
+        layers.Dense(64, activation='relu', name='cog_dense3'),
+        layers.Dense(COGLOAD_NUM_CLASSES, activation='softmax', name='cog_output')
+    ])
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    return model
